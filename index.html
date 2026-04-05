@@ -9,76 +9,237 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>raw-content</title>
 <style>
-  body { font-family: monospace; max-width: 48em; margin: 2em auto; padding: 0 1em; }
-  h1 { word-break: break-all; }
-  a { color: #0969da; }
-  ul { list-style: none; padding: 0; }
-  li { padding: 0.25em 0; }
-  li::before { content: "📄 "; }
-  li.tree::before { content: "📁 "; }
-  .error { color: #cf222e; }
-  .hint { color: #656d76; font-size: 0.9em; }
+:root {
+  --color-fg: #1f2328;
+  --color-fg-muted: #59636e;
+  --color-fg-accent: #0969da;
+  --color-fg-danger: #d1242f;
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f6f8fa;
+  --color-border: #d1d9e0;
+  --color-border-muted: #d8dee4;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-fg: #e6edf3;
+    --color-fg-muted: #8b949e;
+    --color-fg-accent: #4493f8;
+    --color-fg-danger: #f85149;
+    --color-bg: #0d1117;
+    --color-bg-subtle: #161b22;
+    --color-border: #30363d;
+    --color-border-muted: #21262d;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; }
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-fg);
+  background: var(--color-bg);
+  padding: 32px 16px;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--color-fg-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.container { max-width: 1012px; margin: 0 auto; }
+
+/* --- Breadcrumb --- */
+.breadcrumb {
+  font-size: 16px;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+.breadcrumb .sep { color: var(--color-fg-muted); padding: 0 4px; }
+.breadcrumb .cur { font-weight: 600; }
+
+/* --- Listing --- */
+.listing {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.row {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-top: 1px solid var(--color-border-muted);
+  gap: 8px;
+  color: var(--color-fg);
+  text-decoration: none;
+}
+.row:first-child { border-top: none; }
+.row:hover { background: var(--color-bg-subtle); }
+.row svg { flex-shrink: 0; fill: var(--color-fg-muted); }
+.row.dir svg { fill: var(--color-fg-accent); }
+.row .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.row:hover .name { color: var(--color-fg-accent); }
+
+/* --- States --- */
+.state {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--color-fg-muted);
+}
+.state.error { color: var(--color-fg-danger); }
+.spinner {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--color-border);
+  border-top-color: var(--color-fg-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- Hint (landing) --- */
+.hint {
+  text-align: center;
+  padding: 80px 16px;
+  color: var(--color-fg-muted);
+}
+.hint h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--color-fg);
+  margin-bottom: 8px;
+}
+.hint p { margin-top: 8px; }
+.hint code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 2px 8px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
 </style>
 </head>
 <body>
-<h1 id="dirname">.</h1>
-<a id="up">..</a>
-<div id="listing">Loading...</div>
+<div class="container">
+  <nav id="breadcrumb" class="breadcrumb"></nav>
+  <div id="listing" class="listing">
+    <div class="state"><div class="spinner"></div></div>
+  </div>
+</div>
 <script>
-var path = window.location.search.substring(1).split('/').filter(Boolean);
-const owner = path.shift();
-const repo = path.shift();
-const branch = path.shift();
+var ICON_DIR = '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M1.75 1A1.75 1.75 0 0 0 0 2.75v10.5C0 14.216.784 15 1.75 15h12.5A1.75 1.75 0 0 0 16 13.25v-8.5A1.75 1.75 0 0 0 14.25 3H7.5a.25.25 0 0 1-.2-.1l-.9-1.2C6.07 1.26 5.55 1 5 1Z"/></svg>';
+var ICON_FILE = '<svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0 1 13.25 16h-9.5A1.75 1.75 0 0 1 2 14.25Zm1.75-.25a.25.25 0 0 0-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 0 0 .25-.25V6h-2.75A1.75 1.75 0 0 1 9 4.25V1.5Zm6.75.062V4.25c0 .138.112.25.25.25h2.688l-.011-.013-2.914-2.914Z"/></svg>';
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+var segments = window.location.search.substring(1).split('/').filter(Boolean);
+var owner = segments[0];
+var repo = segments[1];
+var branch = segments[2];
+var pathParts = segments.slice(3);
+
+var listing = document.getElementById('listing');
+var breadcrumb = document.getElementById('breadcrumb');
+
 if (!owner || !repo || !branch) {
-  document.getElementById('dirname').textContent = 'Invalid URL format';
-  document.getElementById('listing').innerHTML = '<p class="hint">Expected: ' + window.location.host + '?OWNER/REPO/BRANCH/path/to/directory</p>';
+  breadcrumb.remove();
+  listing.outerHTML = '<div class="hint"><h1>raw-content</h1>'
+    + '<p>Browse the raw contents of any GitHub repository.</p>'
+    + '<p><code>' + esc(window.location.host) + '?OWNER/REPO/BRANCH/path</code></p></div>';
   throw new Error('Invalid URL format');
 }
-document.getElementById('dirname').textContent = window.location.search.substring(1);
-document.getElementById('up').href = window.location.href.split('/').slice(0, -1).join('/');
-document.getElementsByTagName('title')[0].textContent = `${path.join('/') || '/'} | ${owner}/${repo}`;
-var listing = document.getElementById('listing');
 
-function showError(message) {
-  listing.innerHTML = '<p class="error">' + message + '</p>';
+/* Breadcrumb */
+var base = window.location.pathname + '?' + esc(owner) + '/' + esc(repo) + '/' + esc(branch);
+var crumbs = [
+  '<a href="https://github.com/' + esc(owner) + '">' + esc(owner) + '</a>',
+  '<a href="https://github.com/' + esc(owner) + '/' + esc(repo) + '">' + esc(repo) + '</a>'
+];
+if (pathParts.length === 0) {
+  crumbs.push('<span class="cur">' + esc(branch) + '</span>');
+} else {
+  crumbs.push('<a href="' + base + '">' + esc(branch) + '</a>');
+  for (var i = 0; i < pathParts.length; i++) {
+    if (i === pathParts.length - 1) {
+      crumbs.push('<span class="cur">' + esc(pathParts[i]) + '</span>');
+    } else {
+      var segHref = base + '/' + pathParts.slice(0, i + 1).map(esc).join('/');
+      crumbs.push('<a href="' + segHref + '">' + esc(pathParts[i]) + '</a>');
+    }
+  }
+}
+breadcrumb.innerHTML = crumbs.join('<span class="sep">/</span>');
+document.title = (pathParts.join('/') || '/') + ' \u00b7 ' + owner + '/' + repo;
+
+/* API */
+function showError(msg) {
+  listing.innerHTML = '<div class="state error">' + esc(msg) + '</div>';
 }
 
-function checkResponse(response) {
-  if (!response.ok) {
-    if (response.status === 404) throw new Error('Not found — check that the repository, branch, and path exist');
-    if (response.status === 403) throw new Error('Rate limited — try again later or use an authenticated request');
-    throw new Error(response.status + ' ' + response.statusText);
+function checkResponse(r) {
+  if (!r.ok) {
+    if (r.status === 404) throw new Error('Not found \u2014 check that the repository, branch, and path exist');
+    if (r.status === 403) throw new Error('API rate limit exceeded \u2014 try again later');
+    throw new Error('HTTP ' + r.status + ' ' + r.statusText);
   }
-  return response.json();
+  return r.json();
 }
 
 function traverse(tree, path) {
   if (path.length === 0) return tree;
-  const next = path.shift();
-  const entry = tree.tree.find(x => x.path === next);
+  var next = path.shift();
+  var entry = tree.tree.find(function(x) { return x.path === next; });
   if (!entry) throw new Error('Path not found: ' + next);
   if (entry.type === 'blob') {
-    var filePath = window.location.search.substring(1).split('/').slice(3).join('/');
-    window.location.replace(`https://raw.githubusercontent.com/${owner}/${repo}/refs/heads/${branch}/${filePath}`);
+    window.location.replace('https://raw.githubusercontent.com/' + owner + '/' + repo + '/refs/heads/' + branch + '/' + pathParts.join('/'));
     return null;
   }
-  return fetch(entry.url).then(checkResponse).then(subtree => traverse(subtree, path));
+  return fetch(entry.url).then(checkResponse).then(function(sub) { return traverse(sub, path); });
 }
-var subdir = window.location.search.substring(1).split('/').slice(3).join('/');
-fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}`)
+
+var rawBase = 'https://raw.githubusercontent.com/' + owner + '/' + repo + '/refs/heads/' + branch + '/' + (pathParts.length ? pathParts.join('/') + '/' : '');
+
+fetch('https://api.github.com/repos/' + owner + '/' + repo + '/git/trees/' + branch)
   .then(checkResponse)
-  .then(tree => traverse(tree, path))
-  .then(dir => {
+  .then(function(tree) { return traverse(tree, pathParts.slice()); })
+  .then(function(dir) {
     if (!dir) return;
-    listing.innerHTML = '<ul>' + dir.tree.map(
-      x => `<li class="${x.type}"><a href="${
-        x.type == 'tree' ? window.location.href : `https://raw.githubusercontent.com/${owner}/${repo}/refs/heads/${branch}/${
-          subdir ? subdir + '/' : ''
-        }`
-      }${x.path}">${x.path}</a></li>`
-    ).join('') + '</ul>';
+    var rows = [];
+
+    if (pathParts.length > 0) {
+      var upHref = pathParts.length > 1
+        ? base + '/' + pathParts.slice(0, -1).map(esc).join('/')
+        : base;
+      rows.push('<a class="row dir" href="' + upHref + '">' + ICON_DIR + '<span class="name">..</span></a>');
+    }
+
+    var sorted = dir.tree.slice().sort(function(a, b) {
+      if (a.type === 'tree' && b.type !== 'tree') return -1;
+      if (a.type !== 'tree' && b.type === 'tree') return 1;
+      return a.path.localeCompare(b.path);
+    });
+
+    sorted.forEach(function(x) {
+      var isDir = x.type === 'tree';
+      var href = isDir
+        ? base + '/' + pathParts.concat(x.path).map(esc).join('/')
+        : rawBase + encodeURIComponent(x.path);
+      rows.push(
+        '<a class="row' + (isDir ? ' dir' : '') + '" href="' + href + '">'
+        + (isDir ? ICON_DIR : ICON_FILE)
+        + '<span class="name">' + esc(x.path) + '</span></a>'
+      );
+    });
+
+    listing.innerHTML = rows.length ? rows.join('') : '<div class="state">Empty directory</div>';
   })
-  .catch(error => showError(error.message));
+  .catch(function(e) { showError(e.message); });
 </script>
 </body>
 </html>
