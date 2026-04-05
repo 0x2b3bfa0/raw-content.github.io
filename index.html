@@ -318,11 +318,9 @@ branchBtn.addEventListener('click', function(e) {
       .then(checkResponse)
       .then(function(branches) {
         branchesLoaded = true;
-        var pathSuffix = pathParts.length ? '/' + pathParts.join('/') : '';
         branchList.innerHTML = branches.map(function(b) {
-          var href = window.location.pathname + '?' + esc(owner) + '/' + esc(repo) + '/' + esc(b.name) + pathSuffix;
           var isActive = b.name === branch;
-          return '<a class="dropdown-item' + (isActive ? ' active' : '') + '" href="' + href + '">'
+          return '<a class="dropdown-item' + (isActive ? ' active' : '') + '" data-branch="' + esc(b.name) + '" href="#">'
             + '<span class="check">' + (isActive ? ICON_CHECK : '') + '</span>'
             + '<span class="branch-name">' + esc(b.name) + '</span></a>';
         }).join('');
@@ -331,6 +329,44 @@ branchBtn.addEventListener('click', function(e) {
         branchList.innerHTML = '<div class="dropdown-loading">' + esc(err.message) + '</div>';
       });
   }
+});
+
+/* Resolve the deepest valid prefix of targetPath in a branch tree */
+function resolveDeepest(tree, targetPath, resolved) {
+  if (targetPath.length === 0) return Promise.resolve(resolved);
+  var next = targetPath[0];
+  var entry = tree.tree.find(function(x) { return x.path === next; });
+  if (!entry) return Promise.resolve(resolved);
+  if (entry.type === 'blob') return Promise.resolve(resolved.concat(next));
+  return fetch(entry.url).then(checkResponse).then(function(sub) {
+    return resolveDeepest(sub, targetPath.slice(1), resolved.concat(next));
+  }).catch(function() { return resolved; });
+}
+
+/* Switch branch: validate path, fall back to deepest valid prefix */
+function switchBranch(newBranch) {
+  branchDropdown.classList.remove('open');
+  if (newBranch === branch && pathParts.length === 0) return;
+  var newBase = window.location.pathname + '?' + owner + '/' + repo + '/' + newBranch;
+  if (pathParts.length === 0 || newBranch === branch) {
+    window.location.href = newBase + (pathParts.length ? '/' + pathParts.join('/') : '');
+    return;
+  }
+  listing.innerHTML = '<div class="state"><div class="spinner"></div></div>';
+  fetch('https://api.github.com/repos/' + owner + '/' + repo + '/git/trees/' + encodeURIComponent(newBranch))
+    .then(checkResponse)
+    .then(function(tree) { return resolveDeepest(tree, pathParts.slice(), []); })
+    .then(function(valid) {
+      window.location.href = newBase + (valid.length ? '/' + valid.join('/') : '');
+    })
+    .catch(function() { window.location.href = newBase; });
+}
+
+branchList.addEventListener('click', function(e) {
+  var item = e.target.closest('.dropdown-item');
+  if (!item) return;
+  e.preventDefault();
+  switchBranch(item.getAttribute('data-branch'));
 });
 
 branchDropdown.addEventListener('click', function(e) { e.stopPropagation(); });
