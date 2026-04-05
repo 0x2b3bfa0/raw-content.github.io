@@ -25,7 +25,7 @@
 <a id="up">..</a>
 <div id="listing">Loading...</div>
 <script>
-var path = window.location.search.substring(1).split('/');
+var path = window.location.search.substring(1).split('/').filter(Boolean);
 const owner = path.shift();
 const repo = path.shift();
 const branch = path.shift();
