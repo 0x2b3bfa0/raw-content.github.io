@@ -53,24 +53,30 @@ function checkResponse(response) {
 }
 
 function traverse(tree, path) {
-  if (path.length === 0) return Promise.resolve(tree);
+  if (path.length === 0) return tree;
   const next = path.shift();
   const entry = tree.tree.find(x => x.path === next);
   if (!entry) throw new Error('Path not found: ' + next);
+  if (entry.type === 'blob') {
+    var filePath = window.location.search.substring(1).split('/').slice(3).join('/');
+    window.location.replace(`https://raw.githubusercontent.com/${owner}/${repo}/refs/heads/${branch}/${filePath}`);
+    return null;
+  }
   return fetch(entry.url).then(checkResponse).then(subtree => traverse(subtree, path));
 }
+var subdir = window.location.search.substring(1).split('/').slice(3).join('/');
 fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}`)
   .then(checkResponse)
-  .then(tree => {
-    traverse(tree, path).then(dir => {
-      listing.innerHTML = '<ul>' + dir.tree.map(
-        x => `<li class="${x.type}"><a href="${
-          x.type == 'tree' ? window.location.href : `https://raw.githubusercontent.com/${owner}/${repo}/refs/heads/${branch}/${
-            window.location.search.substring(1).split('/').slice(3).join('/')
-          }`
-        }/${x.path}">${x.path}</a></li>`
-      ).join('') + '</ul>';
-    }).catch(error => showError(error.message));
+  .then(tree => traverse(tree, path))
+  .then(dir => {
+    if (!dir) return;
+    listing.innerHTML = '<ul>' + dir.tree.map(
+      x => `<li class="${x.type}"><a href="${
+        x.type == 'tree' ? window.location.href : `https://raw.githubusercontent.com/${owner}/${repo}/refs/heads/${branch}/${
+          subdir ? subdir + '/' : ''
+        }`
+      }${x.path}">${x.path}</a></li>`
+    ).join('') + '</ul>';
   })
   .catch(error => showError(error.message));
 </script>
